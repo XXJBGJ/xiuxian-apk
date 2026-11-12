@@ -1,0 +1,46 @@
+name: publish-installer
+
+# 安装包库的发布通道：把 apk/app.b64 解码成 APK，并发布为 Release 资产，
+# 任何人都能匿名浏览与下载；源码仓库保持私有，不在这里出现。
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Decode and create release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          if [ ! -f apk/tag.txt ]; then
+            echo "apk/tag.txt 不存在，跳过"
+            exit 0
+          fi
+          TAG=$(tr -d '[:space:]' < apk/tag.txt)
+          if [ -z "$TAG" ]; then
+            echo "tag 为空，跳过"
+            exit 0
+          fi
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $TAG 已存在，跳过"
+            exit 0
+          fi
+          if [ ! -f apk/app.b64 ]; then
+            echo "apk/app.b64 不存在，跳过"
+            exit 0
+          fi
+          base64 -d apk/app.b64 > xiuxian-script.apk
+          ls -l xiuxian-script.apk
+          gh release create "$TAG" xiuxian-script.apk \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "安装包 $TAG" \
+            --notes "由安装包库自动发布的可下载安装包。"
